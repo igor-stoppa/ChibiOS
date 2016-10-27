@@ -1,5 +1,7 @@
 /*
-  ChibiOS - Copyright (C) 2016 Theodore Ateba
+  EXT Low Level Driver for ChibiOS
+  Copyright (C) 2015 Igor Stoppa <igor.stoppa@gmail.com>
+  Copyright (C) 2016 Theodore Ateba
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -30,218 +32,331 @@
 /* Driver local definitions.                                                 */
 /*===========================================================================*/
 
+#define EXT_EICRA_LOW_LEVEL    0
+#define EXT_EICRA_BOTH_EDGES   1
+#define EXT_EICRA_FALLING_EDGE 2
+#define EXT_EICRA_RISING_EDGE  3
+
+/**
+ * @brief   Declares the isr for the ext channel specified
+ *
+ * @param[in] channel      number of the channel
+ *
+ * @notapi
+ */
+
+#define declare_extint_isr(channel)                            \
+  OSAL_IRQ_HANDLER(INT##channel##_vect)                        \
+  {                                                            \
+    OSAL_IRQ_PROLOGUE();                                       \
+    EXTD1.config->channels[EXT_INT##channel##_CHANNEL].        \
+      cb(&EXTD1, EXT_INT##channel##_CHANNEL);                  \
+    OSAL_IRQ_EPILOGUE();                                       \
+  }
+
+/**
+ * @brief   Declares the isr for the pc channel specified
+ *
+ * @param[in] port      number of the port
+ *
+ * @notapi
+ */
+
+#define declare_pcint_isr(index)                                       \
+  OSAL_IRQ_HANDLER(PCINT##index##_vect) {                              \
+    OSAL_IRQ_PROLOGUE();                                               \
+    EXTD1.pc_current_values[index] =                                   \
+      (*(PINS[index])) & (*(PCMSK[index]));                            \
+    EXTD1.config->channels[EXT_PCINT##index##_INDEX]                   \
+      .cb(&EXTD1, EXT_PCINT##index##_INDEX - EXT_PCINT_MIN_INDEX);     \
+    EXTD1.pc_old_values[index] = EXTD1.pc_current_values[index];       \
+    OSAL_IRQ_EPILOGUE();                                               \
+  }
+
 /*===========================================================================*/
 /* Driver exported variables.                                                */
 /*===========================================================================*/
 
 /**
- * @brief EXTD1 driver identifier.
+ * @brief   EXT1 driver identifier.
  */
-EXTDriver EXTD1;
+#if (AVR_EXT_USE_EXT1 == TRUE) || defined(__DOXYGEN__)
+  EXTDriver EXTD1;
+#endif
+
 
 /*===========================================================================*/
 /* Driver local variables and types.                                         */
 /*===========================================================================*/
+
+/**
+ * @brief   Vector with addresses of Ports available.
+ */
+volatile uint8_t * const PINS[EXT_PC_NUM_PORTS] = {
+#if defined(PORTA)
+  (volatile uint8_t *const)&PINA,
+#endif
+#if defined(PORTB)
+  (volatile uint8_t *const)&PINB,
+#endif
+#if defined(PORTC)
+  (volatile uint8_t *const)&PINC,
+#endif
+#if defined(PORTD)
+  (volatile uint8_t *const)&PIND,
+#endif
+#if defined(PORTE)
+  (volatile uint8_t *const)&PINE,
+#endif
+#if defined(PORTF)
+  (volatile uint8_t *const)&PINF,
+#endif
+#if defined(PORTG)
+  (volatile uint8_t *const)&PING,
+#endif
+#if defined(PORTH)
+  (volatile uint8_t *const)&PINH,
+#endif
+#if defined(PORTI)
+  (volatile uint8_t *const)&PINI,
+#endif
+#if defined(PORTJ)
+  (volatile uint8_t *const)&PINJ,
+#endif
+};
+
+/**
+ * @brief   Vector with addresses of Port Masks available.
+ */
+volatile uint8_t * const PCMSK[EXT_PC_NUM_PORTS] = {
+  #if 0 < EXT_PC_NUM_PORTS
+    (volatile uint8_t *const)&PCMSK0,
+  #endif
+  #if 1 < EXT_PC_NUM_PORTS
+    (volatile uint8_t *const)&PCMSK1,
+  #endif
+  #if 2 < EXT_PC_NUM_PORTS
+    (volatile uint8_t *const)&PCMSK2,
+  #endif
+  #if 3 < EXT_PC_NUM_PORTS
+    (volatile uint8_t *const)&PCMSK3,
+  #endif
+  #if 4 < EXT_PC_NUM_PORTS
+    (volatile uint8_t *const)&PCMSK4,
+  #endif
+  #if 5 < EXT_PC_NUM_PORTS
+    (volatile uint8_t *const)&PCMSK5,
+  #endif
+  #if 6 < EXT_PC_NUM_PORTS
+    (volatile uint8_t *const)&PCMSK6,
+  #endif
+  #if 7 < EXT_PC_NUM_PORTS
+    (volatile uint8_t *const)&PCMSK7,
+  #endif
+  #if 8 < EXT_PC_NUM_PORTS
+    (volatile uint8_t *const)&PCMSK8,
+  #endif
+  #if 9 < EXT_PC_NUM_PORTS
+    (volatile uint8_t *const)&PCMSK9,
+  #endif
+};
+
+
 
 /*===========================================================================*/
 /* Driver local functions.                                                   */
 /*===========================================================================*/
 
 /**
- * @brief   Set the INTx interrupt trigger front or state.
+ * @brief   Configures and activates the Pin Changed  inputs.
  *
- * @param[in] channel   the channel to configure
- * @param[in] edge      the front or state to configure
+ * @param[in] extp      pointer to the @p EXTDriver object
+ *
+ * @notapi
  */
-void ext_lld_set_intx_edges(expchannel_t channel, uint8_t edge) {
-#if AVR_EXT_USE_INT0 || defined(__DOXYGEN__)
-  if (channel == INT0) {
-    if (edge == EXT_CH_MODE_RISING_EDGE) {
-      EICRA |= (1 << 0);
-      EICRA |= (1 << 1);
-    } else if (edge == EXT_CH_MODE_FALLING_EDGE) {
-      EICRA &= ~(1 << 0);
-      EICRA |= (1 << 1);
-    } else if (edge == EXT_CH_MODE_BOTH_EDGES) {
-      EICRA |= (1 << 0);
-      EICRA &= ~(1 << 1);
-    } else if (edge == EXT_CH_MODE_LOW_LEVEL) {
-      EICRA &= ~(1 << 0);
-      EICRA &= ~(1 << 1);
+inline void start_pc(EXTDriver *extp) {
+  uint8_t new_PCICR = 0;
+  uint8_t i;
+  for (i = EXT_PC_MIN_PORT; i <= EXT_PC_MAX_PORT; i++)
+    if (extp->config->channels[i].mode) {
+        new_PCICR |= _BV(i - EXT_PC_MIN_PORT);
+        (*(PCMSK[i - EXT_PC_MIN_PORT])) = extp->config->channels[i].mode;
     }
-  }
-#endif
-#if AVR_EXT_USE_INT1 || defined(__DOXYGEN__)
-  if (channel == INT1) {
-    if (edge == EXT_CH_MODE_RISING_EDGE) {
-      EICRA |= (1 << 2);
-      EICRA |= (1 << 3);
-    } else if (edge == EXT_CH_MODE_FALLING_EDGE) {
-      EICRA &= ~(1 << 2);
-      EICRA |= (1 << 3);
-    } else if (edge == EXT_CH_MODE_BOTH_EDGES) {
-      EICRA |= (1 << 2);
-      EICRA &= ~(1 << 3);
-    } else if (edge == EXT_CH_MODE_LOW_LEVEL) {
-      EICRA &= ~(1 << 2);
-      EICRA &= ~(1 << 3);
+  /* Enables/disables the peripheral, as requested. */
+  PCICR = new_PCICR;
+}
+
+
+/**
+ * @brief   Configures and activates the Pin Changed  inputs.
+ *
+ * @param[in] extp      pointer to the @p EXTDriver object
+ *
+ * @notapi
+ */
+inline void start_ext(EXTDriver *extp) {
+  uint8_t new_EICRA = 0;
+  uint8_t new_EIMSK = 0;
+  for (expchannel_t channel = EXT_INT_MIN_CHANNEL;
+       channel <= EXT_INT_MAX_CHANNEL; channel++) {
+    /* Determines the triggering condition for each channell. */
+    switch(extp->config->channels[channel].mode &
+           ~(EXT_CH_MODE_AUTOSTART | EXT_CH_MODE_INTERNAL_PULLUP)) {
+      case EXT_CH_MODE_LOW_LEVEL:
+        new_EICRA |=
+          (EXT_EICRA_LOW_LEVEL << (2 * (channel - EXT_INT_MIN_CHANNEL)));
+        break;
+      case EXT_CH_MODE_BOTH_EDGES:
+        new_EICRA |=
+          (EXT_EICRA_BOTH_EDGES << (2 * (channel - EXT_INT_MIN_CHANNEL)));
+        break;
+      case EXT_CH_MODE_RISING_EDGE:
+        new_EICRA |=
+          (EXT_EICRA_RISING_EDGE << (2 * (channel - EXT_INT_MIN_CHANNEL)));
+        break;
+      case EXT_CH_MODE_FALLING_EDGE:
+        new_EICRA |=
+          (EXT_EICRA_FALLING_EDGE << (2 * (channel - EXT_INT_MIN_CHANNEL)));
+        break;
+      default: osalDbgAssert(FALSE, "unsupported mode");
     }
+    if (extp->config->channels[channel].mode & EXT_CH_MODE_AUTOSTART)
+      new_EIMSK |= (1 << (channel - EXT_INT_MIN_CHANNEL));
+    /* Determines which channel must be started right away. */
+    if (extp->config->channels[channel].mode & EXT_CH_MODE_AUTOSTART)
+      new_EIMSK |= (1 << (channel - EXT_INT_MIN_CHANNEL));
   }
-#endif
-#if AVR_EXT_USE_INT2 || defined(__DOXYGEN__)
-  if (channel == INT2) {
-    if (edge == EXT_CH_MODE_RISING_EDGE) {
-      EICRA |= (1 << 4);
-      EICRA |= (1 << 5);
-    } else if (edge == EXT_CH_MODE_FALLING_EDGE) {
-      EICRA &= ~(1 << 4);
-      EICRA |= (1 << 5);
-    } else if (edge == EXT_CH_MODE_BOTH_EDGES) {
-      EICRA |= (1 << 4);
-      EICRA &= ~(1 << 5);
-    } else if (edge == EXT_CH_MODE_LOW_LEVEL) {
-      EICRA &= ~(1 << 4);
-      EICRA &= ~(1 << 5);
-    }
-  }
-#endif
-#if AVR_EXT_USE_INT3 || defined(__DOXYGEN__)
-  if (channel == INT3) {
-    if (edge == EXT_CH_MODE_RISING_EDGE) {
-      EICRA |= (1 << 6);
-      EICRA |= (1 << 7);
-    } else if (edge == EXT_CH_MODE_FALLING_EDGE) {
-      EICRA &= ~(1 << 6);
-      EICRA |= (1 << 7);
-    } else if (edge == EXT_CH_MODE_BOTH_EDGES) {
-      EICRA |= (1 << 6);
-      EICRA &= ~(1 << 7);
-    } else if (edge == EXT_CH_MODE_LOW_LEVEL) {
-      EICRA &= ~(1 << 6);
-      EICRA &= ~(1 << 7);
-    }
-  }
-#endif
-#if AVR_EXT_USE_INT4 || defined(__DOXYGEN__)
-  if (channel == INT4) {
-    if (edge == EXT_CH_MODE_RISING_EDGE) {
-      EICRB |= (1 << 0);
-      EICRB |= (1 << 1);
-    } else if (edge == EXT_CH_MODE_FALLING_EDGE) {
-      EICRB &= ~(1 << 0);
-      EICRB |= (1 << 1);
-    } else if (edge == EXT_CH_MODE_BOTH_EDGES) {
-      EICRB |= (1 << 0);
-      EICRB &= ~(1 << 1);
-    } else if (edge == EXT_CH_MODE_LOW_LEVEL) {
-      EICRB &= ~(1 << 0);
-      EICRB &= ~(1 << 1);
-    }
-  }
-#endif
-#if AVR_EXT_USE_INT5 || defined(__DOXYGEN__)
-  if (channel == INT5) {
-    if (edge == EXT_CH_MODE_RISING_EDGE) {
-      EICRB |= (1 << 2);
-      EICRB |= (1 << 3);
-    } else if (edge == EXT_CH_MODE_FALLING_EDGE) {
-      EICRB &= ~(1 << 2);
-      EICRB |= (1 << 3);
-    } else if (edge == EXT_CH_MODE_BOTH_EDGES) {
-      EICRB |= (1 << 2);
-      EICRB &= ~(1 << 3);
-    } else if (edge == EXT_CH_MODE_LOW_LEVEL) {
-      EICRB &= ~(1 << 2);
-      EICRB &= ~(1 << 3);
-    }
-  }
-#endif
+  /* Configures the peripheral. */
+  EICRA = new_EICRA;
+  /* Enables/disables the peripheral, as requested. */
+  EIMSK = new_EIMSK;
 }
 
 /*===========================================================================*/
 /* Driver interrupt handlers.                                                */
 /*===========================================================================*/
 
-#if AVR_EXT_USE_INT0 || defined(__DOXYGEN__)
-/**
- * @brief EXTI[INT0] interrupt handler.
- *
- * @isr
- */
-OSAL_IRQ_HANDLER(INT0_vect) {
-  OSAL_IRQ_PROLOGUE();
-  EXTD1.config->channels[INT0].cb(&EXTD1, INT0);
-  OSAL_IRQ_EPILOGUE();
-}
+  /*
+   * Interrupt handlers for PC-type interrupts.
+   */
+#if AVR_EXT_USE_EXT1 || defined(__DOXYGEN__)
+  #define EXT_PCINT_MIN_INDEX    EXT_PC_MIN_PORT
+  #if 0 < EXT_PC_NUM_PORTS
+    #define  EXT_PCINT0_INDEX     EXT_PCINT_MIN_INDEX
+    declare_pcint_isr(0);
+  #endif
+  #if 1 < EXT_PC_NUM_PORTS
+    #define  EXT_PCINT1_INDEX    (EXT_PCINT0_INDEX  + 1)
+    declare_pcint_isr(1);
+  #endif
+  #if 2 < EXT_PC_NUM_PORTS
+    #define  EXT_PCINT2_INDEX    (EXT_PCINT1_INDEX  + 1)
+    declare_pcint_isr(2);
+  #endif
+  #if 3 < EXT_PC_NUM_PORTS
+    #define  EXT_PCINT3_INDEX    (EXT_PCINT2_INDEX  + 1)
+    declare_pcint_isr(3);
+  #endif
+  #if 4 < EXT_PC_NUM_PORTS
+    #define  EXT_PCINT4_INDEX    (EXT_PCINT3_INDEX  + 1)
+    declare_pcint_isr(4);
+  #endif
+  #if 5 < EXT_PC_NUM_PORTS
+    #define  EXT_PCINT5_INDEX    (EXT_PCINT4_INDEX  + 1)
+    declare_pcint_isr(5);
+  #endif
+  #if 6 < EXT_PC_NUM_PORTS
+    #define  EXT_PCINT6_INDEX    (EXT_PCINT5_INDEX  + 1)
+    declare_pcint_isr(6);
+  #endif
+  #if 7 < EXT_PC_NUM_PORTS
+    #define  EXT_PCINT7_INDEX    (EXT_PCINT6_INDEX  + 1)
+    declare_pcint_isr(7);
+  #endif
+  #if 8 < EXT_PC_NUM_PORTS
+    #define  EXT_PCINT8_INDEX    (EXT_PCINT7_INDEX  + 1)
+    declare_pcint_isr(8);
+  #endif
+  #if 9 < EXT_PC_NUM_PORTS
+    #define  EXT_PCINT9_INDEX    (EXT_PCINT8_INDEX  + 1)
+    declare_pcint_isr(9);
+  #endif
+
+  /*
+   * Interrupt handlers for EXT-type interrupts.
+   */
+  #if 0 < EXT_INT_NUM_CHANNELS
+    declare_extint_isr(0);
+  #endif
+  #if 1 < EXT_INT_NUM_CHANNELS
+    declare_extint_isr(1);
+  #endif
+  #if 2 < EXT_INT_NUM_CHANNELS
+    declare_extint_isr(2);
+  #endif
+  #if 3 < EXT_INT_NUM_CHANNELS
+    declare_extint_isr(3);
+  #endif
+  #if 4 < EXT_INT_NUM_CHANNELS
+    declare_extint_isr(4);
+  #endif
+  #if 5 < EXT_INT_NUM_CHANNELS
+    declare_extint_isr(5);
+  #endif
 #endif
 
-#if AVR_EXT_USE_INT1 || defined(__DOXYGEN__)
-/**
- * @brief EXTI[INT1] interrupt handler.
- *
- * @isr
- */
-OSAL_IRQ_HANDLER(INT1_vect) {
-  OSAL_IRQ_PROLOGUE();
-  EXTD1.config->channels[INT1].cb(&EXTD1, INT1);
-  OSAL_IRQ_EPILOGUE();
-}
-#endif
-
-#if AVR_EXT_USE_INT2 || defined(__DOXYGEN__)
-/**
- * @brief EXTI[INT2] interrupt handler.
- *
- * @isr
- */
-OSAL_IRQ_HANDLER(INT2_vect) {
-  OSAL_IRQ_PROLOGUE();
-  EXTD1.config->channels[INT2].cb(&EXTD1, INT2);
-  OSAL_IRQ_EPILOGUE();
-}
-#endif
-
-#if AVR_EXT_USE_INT3 || defined(__DOXYGEN__)
-/**
- * @brief EXTI[INT3] interrupt handler.
- *
- * @isr
- */
-OSAL_IRQ_HANDLER(INT3_vect) {
-  OSAL_IRQ_PROLOGUE();
-  EXTD1.config->channels[INT3].cb(&EXTD1, INT3);
-  OSAL_IRQ_EPILOGUE();
-}
-#endif
-
-#if AVR_EXT_USE_INT4 || defined(__DOXYGEN__)
-/**
- * @brief EXTI[INT4] interrupt handler.
- *
- * @isr
- */
-OSAL_IRQ_HANDLER(INT4_vect) {
-  OSAL_IRQ_PROLOGUE();
-  EXTD1.config->channels[INT4].cb(&EXTD1, INT4);
-  OSAL_IRQ_EPILOGUE();
-}
-#endif
-#if AVR_EXT_USE_INT5 || defined(__DOXYGEN__)
-/**
- * @brief EXTI[INT5] interrupt handler.
- *
- * @isr
- */
-OSAL_IRQ_HANDLER(INT5_vect) {
-  OSAL_IRQ_PROLOGUE();
-  EXTD1.config->channels[INT5].cb(&EXTD1, INT5);
-  OSAL_IRQ_EPILOGUE();
-}
-#endif
 
 /*===========================================================================*/
 /* Driver functions.                                                         */
 /*===========================================================================*/
+
+/**
+ * @brief   Low level EXT driver initialization.
+ *
+ * @notapi
+ */
+void ext_lld_init(void) {
+#if AVR_EXT_USE_EXT1 == TRUE
+  /* Driver initialization.*/
+  extObjectInit(&EXTD1);
+  for (int i = 0; i < EXT_PC_NUM_PORTS; i++)
+    EXTD1.pc_old_values[i] = 0;
+#endif
+}
+
+/**
+ * @brief   Configures and activates the EXT peripheral.
+ *
+ * @param[in] extp      pointer to the @p EXTDriver object
+ *
+ * @notapi
+ */
+void ext_lld_start(EXTDriver *extp) {
+#if AVR_EXT_USE_EXT1 == TRUE
+  start_ext(extp);
+  start_pc(extp);
+#endif
+}
+
+/**
+ * @brief   Deactivates the EXT peripheral.
+ *
+ * @param[in] extp      pointer to the @p EXTDriver object
+ *
+ * @notapi
+ */
+void ext_lld_stop(EXTDriver *extp) {
+
+  if (extp->state == EXT_ACTIVE) {
+    /* Disables the peripheral.*/
+#if AVR_EXT_USE_EXT1 == TRUE
+    if (&EXTD1 == extp) {
+      EIMSK = 0;
+      PCICR = 0;
+    }
+#endif
+  }
+}
 
 /**
  * @brief   Enables an EXT channel.
@@ -252,121 +367,36 @@ OSAL_IRQ_HANDLER(INT5_vect) {
  * @notapi
  */
 void ext_lld_channel_enable(EXTDriver *extp, expchannel_t channel) {
-#if AVR_EXT_USE_INT0 || defined(__DOXYGEN__)
-  if (channel == INT0) {
-    EIMSK |= 1 << INT0;
-    ext_lld_set_intx_edges(channel, extp->config->channels[channel].mode);
+  if (EXT_PC_MIN_CHANNEL <= channel && channel <= EXT_PC_MAX_CHANNEL) {
+    uint8_t port = (channel - EXT_PC_MIN_CHANNEL) / 8;
+    (*(uint8_t*)&(extp->config->channels[port].mode)) |=
+      _BV((channel - EXT_PC_MIN_CHANNEL) % 8);
+    (*(PCMSK[port])) = extp->config->channels[port].mode;
+    PCICR |= _BV(port);
+  } else if (channel <= EXT_INT_MAX_CHANNEL) {
+    EIMSK |= (1 << channel);
   }
-#endif
-#if AVR_EXT_USE_INT1 || defined(__DOXYGEN__)
-  if (channel == INT1) {
-    EIMSK |= 1 << INT1;
-    ext_lld_set_intx_edges(channel, extp->config->channels[channel].mode);
-  }
-#endif
-#if AVR_EXT_USE_INT2 || defined(__DOXYGEN__)
-  if (channel == INT2) {
-    EIMSK |= 1 << INT2;
-    ext_lld_set_intx_edges(channel, extp->config->channels[channel].mode);
-  }
-#endif
-#if AVR_EXT_USE_INT3 || defined(__DOXYGEN__)
-  if (channel == INT3) {
-    EIMSK |= 1 << INT3;
-    ext_lld_set_intx_edges(channel, extp->config->channels[channel].mode);
-  }
-#endif
-#if AVR_EXT_USE_INT4 || defined(__DOXYGEN__)
-  if (channel == INT4) {
-    EIMSK |= 1 << INT4;
-    ext_lld_set_intx_edges(channel, extp->config->channels[channel].mode);
-  }
-#endif
-#if AVR_EXT_USE_INT5 || defined(__DOXYGEN__)
-  if (channel == INT5) {
-    EIMSK |= 1 << INT5;
-    ext_lld_set_intx_edges(channel, extp->config->channels[channel].mode);
-  }
-#endif
 }
 
 /**
  * @brief   Disables an EXT channel.
  *
- * @param[in] extp      pinter to the @p EXTDriver object
+ * @param[in] extp      pointer to the @p EXTDriver object
  * @param[in] channel   channel to be disabled
  *
  * @notapi
  */
 void ext_lld_channel_disable(EXTDriver *extp, expchannel_t channel) {
-#if AVR_EXT_USE_INT0 || defined(__DOXYGEN__)
-  if (channel == INT0)
-    EIMSK &= ~(1 << INT0);
-#endif
-#if AVR_EXT_USE_INT1 || defined(__DOXYGEN__)
-  if (channel == INT1)
-    EIMSK &= ~(1 << INT1);
-#endif
-#if AVR_EXT_USE_INT2 || defined(__DOXYGEN__)
-  if (channel == INT2)
-    EIMSK &= ~(1 << INT2);
-#endif
-#if AVR_EXT_USE_INT3 || defined(__DOXYGEN__)
-  if (channel == INT3)
-    EIMSK &= ~(1 << INT3);
-#endif
-#if AVR_EXT_USE_INT4 || defined(__DOXYGEN__)
-  if (channel == INT4)
-    EIMSK &= ~(1 << INT4);
-#endif
-#if AVR_EXT_USE_INT5 || defined(__DOXYGEN__)
-  if (channel == INT5)
-    EIMSK &= ~(1 << INT5);
-#endif
-}
-
-/**
- * @brief   Low level EXT driver initialization.
- *
- * @notapi
- */
-void ext_lld_init(void) {
-  /* Driver initialization.*/
-  extObjectInit(&EXTD1);
-}
-
-/**
- * @brief   Configures and activates the EXT peripheral.
- *
- * @param[in] extp  pointer to the @p EXTDriver object
- *
- * @notapi
- */
-void ext_lld_start(EXTDriver *extp) {
-  expchannel_t line;
-
-  if (extp->state == EXT_STOP)
-    osalSysUnlock();
-
-  /* Configuration of automatic channels. */
-  for (line = 0; line < EXT_MAX_CHANNELS; line++) {
-    if (extp->config->channels[line].mode & EXT_CH_MODE_AUTOSTART)
-      ext_lld_channel_enable(extp, line);
-    else
-      ext_lld_channel_disable(extp, line);
+  if (EXT_PC_MIN_CHANNEL <= channel && channel <= EXT_PC_MAX_CHANNEL) {
+    uint8_t port = (channel - EXT_PC_MIN_CHANNEL) / 8;
+    (*(uint8_t*)&(extp->config->channels[port].mode)) &=
+      ~_BV((channel - EXT_PC_MIN_CHANNEL) % 8);
+    (*(PCMSK[port])) = extp->config->channels[port].mode;
+    if (extp->config->channels[port].mode == 0)
+      PCICR &= ~_BV(port);
+  } else if (channel <= EXT_INT_MAX_CHANNEL) {
+    EIMSK &= ~(1 << channel);
   }
-}
-
-/**
- * @brief   Deactivates the EXT peripheral.
- *
- * @param[in] extp  pointer to the @p EXTDriver object
- *
- * @notapi
- */
-void ext_lld_stop(EXTDriver *extp) {
-  if (extp->state == EXT_ACTIVE)
-    osalSysLock();
 }
 
 #endif /* HAL_USE_EXT */

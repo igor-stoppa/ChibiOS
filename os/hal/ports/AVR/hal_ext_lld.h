@@ -1,5 +1,7 @@
 /*
-  ChibiOS - Copyright (C) 2016 Theodore Ateba
+  EXT Low Level Driver for ChibiOS
+  Copyright (C) 2015 Igor Stoppa <igor.stoppa@gmail.com>
+  Copyright (C) 2016 Theodore Ateba
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -32,18 +34,200 @@
 /*===========================================================================*/
 
 /**
- * @brief Maximum number of EXT channels.
+ * @brief   Indexes of EXT channels.
  */
-#define AVR_INT_NUM_LINES 6 /**< INT0 to INT5 */
+#define EXT_INT_MIN_CHANNEL 0
+#if defined(INT0_vect)
+  #define EXT_INT0_PRESENT 1
+  #define EXT_INT0_CHANNEL   EXT_INT_MIN_CHANNEL
+#else
+  #define EXT_INT0_PRESENT 0
+  #define EXT_INT0_CHANNEL   (EXT_INT_MIN_CHANNEL - 1)
+#endif
+
+#if defined(INT1_vect)
+  #define EXT_INT1_PRESENT 1
+  #define EXT_INT1_CHANNEL   (EXT_INT0_CHANNEL + 1)
+#else
+  #define EXT_INT1_PRESENT 0
+  #define EXT_INT1_CHANNEL   EXT_INT0_CHANNEL
+#endif
+
+#if defined(INT2_vect)
+  #define EXT_INT2_PRESENT 1
+  #define EXT_INT2_CHANNEL   (EXT_INT1_CHANNEL + 1)
+#else
+  #define EXT_INT2_PRESENT 0
+  #define EXT_INT2_CHANNEL   EXT_INT1_CHANNEL
+#endif
+
+#if defined(INT3_vect)
+  #define EXT_INT3_PRESENT 1
+  #define EXT_INT3_CHANNEL   (EXT_INT2_CHANNEL + 1)
+#else
+  #define EXT_INT3_PRESENT 0
+  #define EXT_INT3_CHANNEL   EXT_INT2_CHANNEL
+#endif
+
+#if defined(INT4_vect)
+  #define EXT_INT4_PRESENT 1
+  #define EXT_INT4_CHANNEL   (EXT_INT3_CHANNEL + 1)
+#else
+  #define EXT_INT4_PRESENT 0
+  #define EXT_INT4_CHANNEL   EXT_INT3_CHANNEL
+#endif
+
+#if defined(INT5_vect)
+  #define EXT_INT5_PRESENT 1
+  #define EXT_INT5_CHANNEL   (EXT_INT4_CHANNEL + 1)
+#else
+  #define EXT_INT5_PRESENT 0
+  #define EXT_INT5_CHANNEL   EXT_INT4_CHANNEL
+#endif
+
+#define EXT_INT_NUM_CHANNELS \
+    (EXT_INT0_PRESENT + EXT_INT1_PRESENT + \
+     EXT_INT2_PRESENT + EXT_INT3_PRESENT + \
+     EXT_INT4_PRESENT + EXT_INT5_PRESENT)
+
+#define EXT_INT_MAX_CHANNEL \
+  (EXT_INT_MIN_CHANNEL + EXT_INT_NUM_CHANNELS - 1)
 
 /**
- * @brief Available number of EXT channels.
+ * @brief   Indexes of PC channels.
  */
-#define EXT_MAX_CHANNELS  AVR_INT_NUM_LINES
+#define EXT_PC_MIN_PORT     EXT_INT_NUM_CHANNELS
+#if defined(PORTA)
+  #define PORTA_PRESENT 1
+  #define PORTA_INDEX   EXT_PC_MIN_PORT
+#else
+  #define PORTA_PRESENT 0
+  #define PORTA_INDEX   (EXT_PC_MIN_PORT - 1)
+#endif
+
+#if defined(PORTB)
+  #define PORTB_PRESENT 1
+  #define PORTB_INDEX   (PORTA_INDEX + 1)
+#else
+  #define PORTB_PRESENT 0
+  #define PORTB_INDEX   PORTA_INDEX
+#endif
+
+#if defined(PORTC)
+  #define PORTC_PRESENT 1
+  #define PORTC_INDEX   (PORTB_INDEX + 1)
+#else
+  #define PORTC_PRESENT 0
+  #define PORTC_INDEX   PORTB_INDEX
+#endif
+
+#if defined(PORTD)
+  #define PORTD_PRESENT 1
+  #define PORTD_INDEX   (PORTC_INDEX + 1)
+#else
+  #define PORTD_PRESENT 0
+  #define PORTD_INDEX   PORTC_INDEX
+#endif
+
+#if defined(PORTE)
+  #define PORTE_PRESENT 1
+  #define PORTE_INDEX   (PORTD_INDEX + 1)
+#else
+  #define PORTE_PRESENT 0
+  #define PORTE_INDEX   PORTD_INDEX
+#endif
+
+#if defined(PORTF)
+  #define PORTF_PRESENT 1
+  #define PORTF_INDEX   (PORTE_INDEX + 1)
+#else
+  #define PORTF_PRESENT 0
+  #define PORTF_INDEX   PORTE_INDEX
+#endif
+
+#if defined(PORTG)
+  #define PORTG_PRESENT 1
+  #define PORTG_INDEX   (PORTF_INDEX + 1)
+#else
+  #define PORTG_PRESENT 0
+  #define PORTG_INDEX   PORTF_INDEX
+#endif
+
+#if defined(PORTH)
+  #define PORTH_PRESENT 1
+  #define PORTH_INDEX   (PORTG_INDEX + 1)
+#else
+  #define PORTH_PRESENT 0
+  #define PORTH_INDEX   PORTG_INDEX
+#endif
+
+#if defined(PORTI)
+  #define PORTI_PRESENT 1
+  #define PORTI_INDEX   (PORTH_INDEX + 1)
+#else
+  #define PORTI_PRESENT 0
+  #define PORTI_INDEX   PORTH_INDEX
+#endif
+
+#if defined(PORTJ)
+  #define PORTJ_PRESENT 1
+  #define PORTJ_INDEX   (PORTI_INDEX + 1)
+#else
+  #define PORTJ_PRESENT 0
+  #define PORTJ_INDEX   PORTI_INDEX
+#endif
+
+#if defined(PORTK)
+  #define PORTK_PRESENT 1
+  #define PORTK_INDEX   (PORTJ_INDEX + 1)
+#else
+  #define PORTK_PRESENT 0
+  #define PORTK_INDEX   PORTJ_INDEX
+#endif
+
+/**
+ * @brief   Available number of PC ports.
+ */
+
+#define EXT_PC_NUM_PORTS  \
+    (PORTA_PRESENT + PORTB_PRESENT + PORTC_PRESENT + PORTD_PRESENT +\
+     PORTE_PRESENT + PORTF_PRESENT + PORTG_PRESENT + PORTH_PRESENT +\
+     PORTI_PRESENT + PORTJ_PRESENT + PORTK_PRESENT)
+
+#define EXT_PC_MAX_PORT (EXT_PC_MIN_PORT + EXT_PC_NUM_PORTS - 1)
+
+#define EXT_TOTAL_CHANNELS (EXT_INT_NUM_CHANNELS + EXT_PC_NUM_PORTS)
+#define EXT_MAX_CHANNELS EXT_TOTAL_CHANNELS
+#define EXT_PC_MIN_CHANNEL EXT_INT_NUM_CHANNELS
+#define EXT_PC_MAX_CHANNEL (EXT_PC_MIN_CHANNEL + EXT_PC_NUM_PORTS * 8 - 1)
+
+/**
+ * @brief  Level-driven irq generation.
+ */
+#define EXT_CH_MODE_LEVELS_MASK       8U  /**< @brief Mask of levels field. */
+#undef EXT_CH_MODE_LOW_LEVEL         
+#define EXT_CH_MODE_LOW_LEVEL         8U  /**< @brief Trigger on Low level. */
+#define EXT_CH_MODE_INTERNAL_PULLUP  16U  /**< @brief Use internal pullup.  */
+
+
 
 /*===========================================================================*/
 /* Driver pre-compile time settings.                                         */
 /*===========================================================================*/
+
+/**
+ * @name    AVR configuration options
+ * @{
+ */
+/**
+ * @brief   EXT driver enable switch.
+ * @details If set to @p TRUE the support for EXT1 is included.
+ * @note    The default is @p FALSE.
+ */
+#if !defined(AVR_EXT_USE_EXT1) || defined(__DOXYGEN__)
+#define AVR_EXT_USE_EXT1               FALSE
+#endif
+/** @} */
 
 /*===========================================================================*/
 /* Derived constants and error checks.                                       */
@@ -63,6 +247,7 @@ typedef uint16_t expchannel_t;
  *
  * @param[in] extp  pointer to the @p EXPDriver object triggering the
  *                  callback
+ * @param[in] channel   channel being triggered.
  */
 typedef void (*extcallback_t)(EXTDriver *extp, expchannel_t channel);
 
@@ -71,9 +256,9 @@ typedef void (*extcallback_t)(EXTDriver *extp, expchannel_t channel);
  */
 typedef struct {
   /**
-   * @brief Channel mode.
+   * @brief Channel mode from HAL.
    */
-  uint32_t      mode;
+  uint8_t      mode;
   /**
    * @brief Channel callback.
    */
@@ -88,7 +273,7 @@ typedef struct {
   /**
    * @brief Channel configurations.
    */
-  EXTChannelConfig  channels[EXT_MAX_CHANNELS];
+  EXTChannelConfig  channels[EXT_TOTAL_CHANNELS];
   /* End of the mandatory fields.*/
 } EXTConfig;
 
@@ -106,16 +291,25 @@ struct EXTDriver {
    */
   const EXTConfig *config;
   /* End of the mandatory fields.*/
+  uint8_t pc_current_values[EXT_PC_NUM_PORTS];
+  uint8_t pc_old_values[EXT_PC_NUM_PORTS];
 };
 
 /*===========================================================================*/
 /* Driver macros.                                                            */
 /*===========================================================================*/
 
+#define ext_port_to_channel(port, bit) \
+  ((PORT##port##_INDEX - EXT_PC_MIN_PORT) * 8 + bit)
+
 /*===========================================================================*/
 /* External declarations.                                                    */
 /*===========================================================================*/
+
+#if (AVR_EXT_USE_EXT1 == TRUE) && !defined(__DOXYGEN__)
 extern EXTDriver EXTD1;
+#endif
+
 
 #ifdef __cplusplus
 extern "C" {
